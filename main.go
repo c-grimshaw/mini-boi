@@ -112,10 +112,6 @@ func cleanupExpiredChallenges() {
 
 // GET /mission/coordinates - Serve challenge
 func coordinatesChallengeHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
 	
 	challenge := generateChallenge()
 	
@@ -149,10 +145,6 @@ func coordinatesChallengeHandler(w http.ResponseWriter, r *http.Request) {
 
 // POST /mission/coordinates - Submit answer
 func coordinatesAnswerHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
 	
 	var response TargetResponse
 	if err := json.NewDecoder(r.Body).Decode(&response); err != nil {
@@ -256,19 +248,14 @@ func main() {
 		}
 	}()
 	
-	http.HandleFunc("/mission/coordinates", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "GET" {
-			coordinatesChallengeHandler(w, r)
-		} else if r.Method == "POST" {
-			coordinatesAnswerHandler(w, r)
-		} else {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
+	mux := http.NewServeMux()
 	
-	http.HandleFunc("/status", statusHandler)
+	// Method-specific routing with new ServeMux API
+	mux.HandleFunc("GET /mission/coordinates", coordinatesChallengeHandler)
+	mux.HandleFunc("POST /mission/coordinates", coordinatesAnswerHandler)
+	mux.HandleFunc("GET /status", statusHandler)
 	
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		fmt.Fprintf(w, `TACTICAL TARGET ACQUISITION CHALLENGE SERVER
 ==========================================
@@ -277,8 +264,8 @@ Mission: Identify the closest target to your position (0,0,0)
 
 Endpoints:
   GET  /mission/coordinates  - Get target identification challenge
-  POST /mission/coordinates  - Submit closest target ID (<= 1 second)
-  GET  /status               - Server status
+  POST /mission/coordinates  - Submit closest target ID (< 1 second!)
+  GET  /status              - Server status
 
 Challenge Format:
   GET returns: {
@@ -297,7 +284,8 @@ Challenge Format:
     "closest_target_id": "T1"
   }
 
-Time limit: 1 second from challenge issue to response.
+Algorithm: Calculate 3D distance using √((x₁-x₂)² + (y₁-y₂)² + (z₁-z₂)²)
+Time limit: 1 second from challenge issue to response!
 `)
 	})
 	
@@ -306,7 +294,7 @@ Time limit: 1 second from challenge issue to response.
 	log.Printf("⏱️  Time limit: 1 second per challenge")
 	log.Printf("🎮 Player position: (0, 0, 0)")
 	
-	if err := http.ListenAndServe("0.0.0.0:6969", nil); err != nil {
+	if err := http.ListenAndServe("0.0.0.0:6969", mux); err != nil {
 		log.Fatal("Server failed to start:", err)
 	}
 }
